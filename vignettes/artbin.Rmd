@@ -1,0 +1,215 @@
+---
+title: "Introduction to artbin"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Introduction to artbin}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+library(artbin)
+```
+
+`artbin` calculates the sample size or power for randomised trials with binary
+outcomes.  It supports superiority, non-inferiority (NI), and
+substantial-superiority designs; two-arm and multi-arm (k-group) trials; and a
+range of options including continuity correction, unequal allocation, and
+loss-to-follow-up adjustment.
+
+The package is a faithful R translation of the Stata `artbin` package (v2.1.2)
+described in:
+
+> Marley-Zagar E, White IR, Royston P, Barthel F, Parmar MKB, Babiker AG.
+> artbin: Extended sample size for randomised trials with binary outcomes.
+> *Stata J* 2023; 23(1): 24–52.
+
+The examples in this vignette reproduce the five examples from Section 3 of
+that paper.
+
+---
+
+## 1  Superiority trial — Wald test (Pocock 1983)
+
+Pocock (1983) calculated the sample size for a 2-arm superiority trial
+comparing anturan with placebo in patients after myocardial infarction.  The
+primary outcome was death from any cause within one year.  Control-arm event
+probability $\pi_1 = 0.10$; treatment-arm $\pi_2 = 0.05$; two-sided
+$\alpha = 0.05$; power $= 90\%$.
+
+Because $\pi_2 < \pi_1$, the trial aims to *reduce* the event probability
+(death), so the outcome is **unfavourable** — `artbin` infers this
+automatically.  Pocock used the Wald test (sample-estimate null variance):
+
+```{r pocock}
+artbin(pr = c(0.1, 0.05), alpha = 0.05, power = 0.9, wald = TRUE)
+```
+
+The total sample size of **1156** (578 per arm) matches Pocock's published
+value.
+
+The same result is obtained by framing the outcome as survival
+($\pi_1 = 0.90$, $\pi_2 = 0.95$) with `favourable = TRUE`:
+
+```{r pocock-fav}
+artbin(pr = c(0.9, 0.95), alpha = 0.05, power = 0.9, wald = TRUE,
+       favourable = TRUE)
+```
+
+---
+
+## 2  Score test and comparison with R's `prop.test`
+
+The default test in `artbin` is the score test (Farrington-Manning constrained
+maximum likelihood under $H_0$), the same test used by R's `pwr` package and
+Stata's `power twoproportions`:
+
+```{r score}
+artbin(pr = c(0.1, 0.05), alpha = 0.05, power = 0.9)
+```
+
+The score test requires **1164** participants — slightly more than the Wald
+test because the constrained-ML null variance is larger than the sample
+estimate.
+
+For reference, R's built-in `power.prop.test` gives the same result:
+
+```{r prop-test}
+power.prop.test(p1 = 0.1, p2 = 0.05, sig.level = 0.05, power = 0.9)
+```
+
+---
+
+## 3  One-sided non-inferiority trial
+
+A non-inferiority trial assumes that the new treatment is *at least as good* as
+the control, within a specified margin.  Here both arms have an anticipated
+survival probability of 90%, and the NI margin is 5 percentage points
+($m = -0.05$ means treatment must be no more than 5 pp worse than control):
+
+```{r ni}
+artbin(pr = c(0.9, 0.9), margin = -0.05, onesided = TRUE)
+```
+
+The one-sided $\alpha = 0.05$ test requires **457 patients per arm** (914
+total).
+
+### Calculating power for a fixed sample size
+
+Supply `n` instead of `power` to calculate power:
+
+```{r ni-power}
+artbin(pr = c(0.9, 0.9), margin = -0.05, onesided = TRUE, n = 914)
+```
+
+---
+
+## 4  Multi-arm superiority trial
+
+When three or more event probabilities are supplied, `artbin` uses a global
+chi-squared test to assess whether any difference exists among groups.  The
+sample size for a 4-arm trial ($\pi = 0.1, 0.2, 0.3, 0.4$) at
+$\alpha = 0.10$, power $= 90\%$:
+
+```{r kgroup}
+artbin(pr = c(0.1, 0.2, 0.3, 0.4), alpha = 0.1, power = 0.9)
+```
+
+**44 patients per arm** (176 total) are required.
+
+The return list includes per-arm sample sizes `n1`–`n4` and per-arm expected
+events `D1`–`D4`:
+
+```{r kgroup-arms}
+r <- artbin(pr = c(0.1, 0.2, 0.3, 0.4), alpha = 0.1, power = 0.9)
+data.frame(
+  arm   = paste0("Arm ", 1:4),
+  pr    = c(0.1, 0.2, 0.3, 0.4),
+  n     = c(r$n1, r$n2, r$n3, r$n4),
+  D     = c(r$D1, r$D2, r$D3, r$D4)
+)
+```
+
+---
+
+## 5  Complex NI trial — STREAM
+
+The STREAM trial evaluated a shorter intensive treatment for multi-drug
+resistant tuberculosis against the WHO-recommended lengthier regimen.  Key
+design features:
+
+- Favourable binary outcome (culture-negative at 132 weeks): $\pi_1 = 0.70$
+  (control), $\pi_2 = 0.75$ (treatment)
+- NI margin $m = -0.10$ (treatment must be no more than 10 pp worse)
+- 1:2 allocation (twice as many in treatment)
+- 20% loss to follow-up
+- Wald test (standard for NI trials)
+
+```{r stream}
+artbin(pr = c(0.7, 0.75), margin = -0.1, wald = TRUE,
+       aratios = c(1, 2), ltfu = 0.2)
+```
+
+**398 patients** are required (133 control, 265 treatment), after inflating for
+20% LTFU.  The STREAM trial concluded that the shorter regimen was non-inferior
+to the WHO standard.
+
+---
+
+## Additional options
+
+### Continuity correction
+
+Apply Fleiss's continuity correction with `ccorrect = TRUE`:
+
+```{r ccorrect}
+artbin(pr = c(0.1, 0.05), alpha = 0.05, power = 0.9, ccorrect = TRUE)
+```
+
+### Blackwelder NI reference
+
+A standard Blackwelder (1982) NI calculation with Wald test, one-sided
+$\alpha = 5\%$:
+
+```{r blackwelder}
+artbin(pr = c(0.1, 0.1), margin = 0.2, alpha = 0.1, power = 0.9, wald = TRUE)
+```
+
+### Trend test for ordered dose–response
+
+For k-arm trials with a dose–response structure, `trend = TRUE` uses a linear
+trend test instead of the global chi-squared:
+
+```{r trend}
+artbin(pr = c(0.2, 0.3, 0.4), trend = TRUE)
+```
+
+### Unrounded sample sizes
+
+`noround = TRUE` returns exact (unrounded) per-arm sizes, useful for
+sensitivity analysis or when you want to apply your own rounding:
+
+```{r noround}
+artbin(pr = c(0.1, 0.05), aratios = c(1, 2), noround = TRUE)
+```
+
+---
+
+## References
+
+Blackwelder, W.C. (1982). "Proving the null hypothesis" in clinical trials.
+*Controlled Clinical Trials*, 3(4), 345–353.
+
+Farrington, C.P. and Manning, G. (1990). Test statistics and sample size
+formulae for comparative binomial trials with null hypothesis of non-zero risk
+difference or non-unity relative risk. *Statistics in Medicine*, 9(12),
+1447–1454.
+
+Nunn, A.J., et al. (2019). A trial of a shorter regimen for rifampin-resistant
+tuberculosis. *New England Journal of Medicine*, 380(13), 1201–1213.
+
+Pocock, S.J. (1983). *Clinical Trials: A Practical Approach*. Wiley.
