@@ -1,0 +1,24 @@
+Package: artbin
+Title: Sample Size and Power for Binary Outcome Clinical Trials
+Version: 2.1.2
+Authors@R: c(
+    person("Ian", "White", email = "ian.white@ucl.ac.uk", role = c("aut", "cre")),
+    person("Ella", "Marley-Zagar", role = "aut"),
+    person("Abdel", "Babiker", role = "aut"),
+    person("Patrick", "Royston", role = "aut"),
+    person("Adrian", "Mander", role = "aut"),
+    person("Mahesh", "Parmar", role = "aut"))
+Description: Calculates the power or total sample size for various tests comparing
+    K anticipated probabilities for binary outcomes. Supports superiority,
+    non-inferiority, and substantial-superiority trial designs, with options for
+    conditional and unconditional tests, continuity correction, allocation ratios,
+    and loss to follow-up. Translated from the Stata artbin package (v2.1.2).
+License: GPL (>= 3) | file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Imports:
+    shiny
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
